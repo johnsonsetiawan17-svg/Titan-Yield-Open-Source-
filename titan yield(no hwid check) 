@@ -1,0 +1,717 @@
+ ================================================
+-- Titan Yield | Mobile-Friendly Admin Script
+-- No Unicode / Emoji - Roblox Safe
+-- ================================================
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local TweenService = game:GetService("TweenService")
+
+local LocalPlayer = Players.LocalPlayer
+local Camera = workspace.CurrentCamera
+
+local Settings = {
+    Prefix = ";",
+    AccentColor = Color3.fromRGB(0, 120, 255),
+    BGColor = Color3.fromRGB(20, 20, 30),
+    TextColor = Color3.fromRGB(235, 235, 255),
+    DarkPanel = Color3.fromRGB(14, 14, 22),
+}
+
+local State = {
+    GodmodeActive = false,
+    GodmodeConns = {},
+    NoclipActive = false,
+    NoclipConn = nil,
+    InvisActive = false,
+    -- Flight States
+    FlyActive = false,
+    FlySpeed = 100,
+    FlyConn = nil,
+}
+
+-- ================================================
+-- GUI
+-- ================================================
+
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "TitanYield"
+ScreenGui.ResetOnSpawn = false
+ScreenGui.IgnoreGuiInset = true
+ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+ScreenGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
+
+-- Floating toggle button
+local ToggleBtn = Instance.new("TextButton")
+ToggleBtn.Size = UDim2.new(0, 60, 0, 60)
+ToggleBtn.Position = UDim2.new(1, -75, 1, -90)
+ToggleBtn.BackgroundColor3 = Settings.AccentColor
+ToggleBtn.Text = "TY"
+ToggleBtn.TextSize = 18
+ToggleBtn.Font = Enum.Font.GothamBold
+ToggleBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+ToggleBtn.BorderSizePixel = 0
+ToggleBtn.ZIndex = 10
+ToggleBtn.Active = true
+ToggleBtn.Parent = ScreenGui
+Instance.new("UICorner", ToggleBtn).CornerRadius = UDim.new(1, 0)
+
+-- Main panel
+local MainFrame = Instance.new("Frame")
+MainFrame.Size = UDim2.new(1, -20, 0.75, 0)
+MainFrame.Position = UDim2.new(0, 10, 1, 10)
+MainFrame.BackgroundColor3 = Settings.BGColor
+MainFrame.BorderSizePixel = 0
+MainFrame.ClipsDescendants = true
+MainFrame.Parent = ScreenGui
+Instance.new("UICorner", MainFrame).CornerRadius = UDim.new(0, 12)
+
+local PanelVisible = false
+
+local function TogglePanel()
+    PanelVisible = not PanelVisible
+    local targetY = PanelVisible and 0.22 or 1.05
+    TweenService:Create(MainFrame, TweenInfo.new(0.35, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {
+        Position = UDim2.new(0, 10, targetY, 0)
+    }):Play()
+end
+
+-- Draggable Logic
+local dragging = false
+local dragInput, dragStart, startPos
+local dragDistance = 0
+
+ToggleBtn.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        dragging = true
+        dragStart = input.Position
+        startPos = ToggleBtn.Position
+        dragDistance = 0
+        
+        input.Changed:Connect(function()
+            if input.UserInputState == Enum.UserInputState.End then
+                dragging = false
+            end
+        end)
+    end
+end)
+
+ToggleBtn.InputChanged:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+        dragInput = input
+    end
+end)
+
+UserInputService.InputChanged:Connect(function(input)
+    if input == dragInput and dragging then
+        local delta = input.Position - dragStart
+        dragDistance = dragDistance + delta.Magnitude
+        
+        TweenService:Create(ToggleBtn, TweenInfo.new(0.1, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+            Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+        }):Play()
+    end
+end)
+
+ToggleBtn.MouseButton1Click:Connect(function()
+    if dragDistance < 15 then
+        TogglePanel()
+    end
+end)
+
+-- Title bar
+local TitleBar = Instance.new("Frame")
+TitleBar.Size = UDim2.new(1, 0, 0, 44)
+TitleBar.BackgroundColor3 = Settings.AccentColor
+TitleBar.BorderSizePixel = 0
+TitleBar.Parent = MainFrame
+Instance.new("UICorner", TitleBar).CornerRadius = UDim.new(0, 12)
+
+local TitleFix = Instance.new("Frame")
+TitleFix.Size = UDim2.new(1, 0, 0.5, 0)
+TitleFix.Position = UDim2.new(0, 0, 0.5, 0)
+TitleFix.BackgroundColor3 = Settings.AccentColor
+TitleFix.BorderSizePixel = 0
+TitleFix.Parent = TitleBar
+
+local TitleLabel = Instance.new("TextLabel")
+TitleLabel.Size = UDim2.new(1, -50, 1, 0)
+TitleLabel.Position = UDim2.new(0, 14, 0, 0)
+TitleLabel.BackgroundTransparency = 1
+TitleLabel.Text = "Titan Yield"
+TitleLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+TitleLabel.TextSize = 18
+TitleLabel.Font = Enum.Font.GothamBold
+TitleLabel.TextXAlignment = Enum.TextXAlignment.Left
+TitleLabel.Parent = TitleBar
+
+local CloseBtn = Instance.new("TextButton")
+CloseBtn.Size = UDim2.new(0, 36, 0, 36)
+CloseBtn.Position = UDim2.new(1, -42, 0, 4)
+CloseBtn.BackgroundTransparency = 1
+CloseBtn.Text = "X"
+CloseBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+CloseBtn.TextSize = 16
+CloseBtn.Font = Enum.Font.GothamBold
+CloseBtn.Parent = TitleBar
+CloseBtn.MouseButton1Click:Connect(TogglePanel)
+
+-- Output log
+local OutputBox = Instance.new("ScrollingFrame")
+OutputBox.Size = UDim2.new(1, -10, 1, -100)
+OutputBox.Position = UDim2.new(0, 5, 0, 48)
+OutputBox.BackgroundColor3 = Settings.DarkPanel
+OutputBox.BorderSizePixel = 0
+OutputBox.ScrollBarThickness = 3
+OutputBox.AutomaticCanvasSize = Enum.AutomaticSize.Y
+OutputBox.CanvasSize = UDim2.new(0, 0, 0, 0)
+OutputBox.Parent = MainFrame
+Instance.new("UICorner", OutputBox).CornerRadius = UDim.new(0, 8)
+
+local OutputLayout = Instance.new("UIListLayout")
+OutputLayout.SortOrder = Enum.SortOrder.LayoutOrder
+OutputLayout.Padding = UDim.new(0, 2)
+OutputLayout.Parent = OutputBox
+
+-- Input row
+local InputRow = Instance.new("Frame")
+InputRow.Size = UDim2.new(1, -10, 0, 42)
+InputRow.Position = UDim2.new(0, 5, 1, -47)
+InputRow.BackgroundTransparency = 1
+InputRow.Parent = MainFrame
+
+local InputBox = Instance.new("TextBox")
+InputBox.Size = UDim2.new(1, -54, 1, 0)
+InputBox.BackgroundColor3 = Settings.DarkPanel
+InputBox.BorderSizePixel = 0
+InputBox.PlaceholderText = ";command args..."
+InputBox.PlaceholderColor3 = Color3.fromRGB(100, 100, 130)
+InputBox.Text = ""
+InputBox.TextColor3 = Settings.TextColor
+InputBox.TextSize = 14
+InputBox.Font = Enum.Font.Gotham
+InputBox.ClearTextOnFocus = false
+InputBox.Parent = InputRow
+Instance.new("UICorner", InputBox).CornerRadius = UDim.new(0, 8)
+
+local SendBtn = Instance.new("TextButton")
+SendBtn.Size = UDim2.new(0, 46, 1, 0)
+SendBtn.Position = UDim2.new(1, -46, 0, 0)
+SendBtn.BackgroundColor3 = Settings.AccentColor
+SendBtn.Text = "GO"
+SendBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+SendBtn.TextSize = 14
+SendBtn.Font = Enum.Font.GothamBold
+SendBtn.BorderSizePixel = 0
+SendBtn.Parent = InputRow
+Instance.new("UICorner", SendBtn).CornerRadius = UDim.new(0, 8)
+
+-- ================================================
+-- LOGGER
+-- ================================================
+
+local function Log(msg, color)
+    local label = Instance.new("TextLabel")
+    label.Size = UDim2.new(1, -8, 0, 0)
+    label.AutomaticSize = Enum.AutomaticSize.Y
+    label.BackgroundTransparency = 1
+    label.Text = "  " .. tostring(msg)
+    label.TextColor3 = color or Settings.TextColor
+    label.TextSize = 13
+    label.Font = Enum.Font.Gotham
+    label.TextXAlignment = Enum.TextXAlignment.Left
+    label.TextWrapped = true
+    label.Parent = OutputBox
+    task.wait()
+    OutputBox.CanvasPosition = Vector2.new(0, OutputBox.AbsoluteCanvasSize.Y)
+end
+
+-- ================================================
+-- HELPERS
+-- ================================================
+
+local function GetPlayer(name)
+    if name == "me" then return LocalPlayer end
+    for _, p in Players:GetPlayers() do
+        if p.Name:lower():find(name:lower()) then return p end
+    end
+    return nil
+end
+
+local function GetChar() return LocalPlayer.Character end
+local function GetHRP()
+    local c = GetChar()
+    return c and c:FindFirstChild("HumanoidRootPart")
+end
+local function GetHum()
+    local c = GetChar()
+    return c and c:FindFirstChildOfClass("Humanoid")
+end
+
+local function ClearGodConns()
+    for _, conn in State.GodmodeConns do
+        pcall(function() conn:Disconnect() end)
+    end
+    State.GodmodeConns = {}
+end
+
+-- ================================================
+-- GODMODE - 4 Clientside Methods Layered
+-- ================================================
+
+local function ApplyGodToChar(char)
+    if not char then return end
+    local hum = char:WaitForChild("Humanoid", 5)
+    if not hum then return end
+
+    ClearGodConns()
+
+    hum:SetStateEnabled(Enum.HumanoidStateType.Dead, false)
+
+    table.insert(State.GodmodeConns, hum.HealthChanged:Connect(function(hp)
+        if not State.GodmodeActive then return end
+        if hp <= 0 then hum.Health = hum.MaxHealth end
+    end))
+
+    table.insert(State.GodmodeConns, hum.StateChanged:Connect(function(old, new)
+        if not State.GodmodeActive then return end
+        if new == Enum.HumanoidStateType.Dead then hum:ChangeState(Enum.HumanoidStateType.GettingUp) end
+    end))
+
+    table.insert(State.GodmodeConns, hum.Died:Connect(function()
+        if not State.GodmodeActive then return end
+        task.wait(0.1)
+        LocalPlayer:LoadCharacter()
+    end))
+end
+
+local function EnableGodmode()
+    if State.GodmodeActive then
+        Log("Godmode already ON.", Color3.fromRGB(255, 200, 80))
+        return
+    end
+    State.GodmodeActive = true
+    ApplyGodToChar(LocalPlayer.Character)
+
+    table.insert(State.GodmodeConns, LocalPlayer.CharacterAdded:Connect(function(char)
+        if State.GodmodeActive then
+            task.wait(0.2)
+            ApplyGodToChar(char)
+        end
+    end))
+
+    Log("Godmode ON (4 methods active)", Color3.fromRGB(80, 255, 130))
+end
+
+local function DisableGodmode()
+    if not State.GodmodeActive then
+        Log("Godmode already OFF.", Color3.fromRGB(255, 200, 80))
+        return
+    end
+    State.GodmodeActive = false
+    ClearGodConns()
+
+    local hum = GetHum()
+    if hum then
+        hum:SetStateEnabled(Enum.HumanoidStateType.Dead, true)
+        hum.MaxHealth = 100
+        hum.Health = 100
+    end
+
+    Log("Godmode OFF", Color3.fromRGB(255, 90, 90))
+end
+
+-- ================================================
+-- FLIGHT CONTROLLER CORE
+-- ================================================
+
+local function CleanFlightInstances(char)
+    if not char then return end
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+    if hrp then
+        local oldV = hrp:FindFirstChild("Titan_V")
+        local oldG = hrp:FindFirstChild("Titan_G")
+        if oldV then oldV:Destroy() end
+        if oldG then oldG:Destroy() end
+    end
+    local hum = char:FindFirstChildOfClass("Humanoid")
+    if hum then hum.PlatformStand = false end
+end
+
+local function DisableFlight()
+    State.FlyActive = false
+    if State.FlyConn then
+        State.FlyConn:Disconnect()
+        State.FlyConn = nil
+    end
+    CleanFlightInstances(GetChar())
+    Log("Flight OFF", Color3.fromRGB(255, 90, 90))
+end
+
+local function EnableFlight()
+    if State.FlyActive then CleanFlightInstances(GetChar()) end
+    State.FlyActive = true
+    
+    local char = GetChar()
+    local hum = GetHum()
+    local hrp = GetHRP()
+    
+    if not hum or not hrp then 
+        Log("Character not ready for flight.", Color3.fromRGB(255, 80, 80))
+        return 
+    end
+    
+    hum.PlatformStand = true
+    local bv = Instance.new("BodyVelocity")
+    bv.Name = "Titan_V"
+    bv.MaxForce = Vector3.new(1e6, 1e6, 1e6)
+    bv.Velocity = Vector3.zero
+    bv.Parent = hrp
+    
+    local bg = Instance.new("BodyGyro")
+    bg.Name = "Titan_G"
+    bg.MaxTorque = Vector3.new(1e6, 1e6, 1e6)
+    bg.P = 25000
+    bg.CFrame = Camera.CFrame
+    bg.Parent = hrp
+    
+    local smoothVel = Vector3.zero
+    
+    State.FlyConn = RunService.Heartbeat:Connect(function()
+        local c = GetChar()
+        local currentHRP = c and c:FindFirstChild("HumanoidRootPart")
+        local currentHum = c and c:FindFirstChildOfClass("Humanoid")
+        
+        if not State.FlyActive or not currentHRP or not currentHRP.Parent then
+            DisableFlight()
+            return
+        end
+        
+        local cf = Camera.CFrame
+        local joyDir = currentHum.MoveDirection
+        local moveDir = Vector3.zero
+        
+        if joyDir.Magnitude > 0 then
+            local relative = cf:VectorToObjectSpace(joyDir)
+            moveDir = cf.LookVector * -relative.Z + cf.RightVector * relative.X
+        end
+        
+        if moveDir.Magnitude > 0 then
+            smoothVel = moveDir.Unit * State.FlySpeed
+        else
+            smoothVel = smoothVel * 0.85
+        end
+        
+        bv.Velocity = bv.Velocity:Lerp(smoothVel, 0.2)
+        bg.CFrame = cf
+    end)
+    
+    Log("Flight ON | Speed: " .. State.FlySpeed, Color3.fromRGB(80, 255, 130))
+end
+
+-- ================================================
+-- COMMANDS
+-- ================================================
+
+local Commands = {}
+
+Commands["help"] = {
+    desc = "List all commands",
+    func = function()
+        Log("=== Titan Yield Commands ===", Settings.AccentColor)
+        for name, data in pairs(Commands) do
+            Log(";" .. name .. " - " .. (data.desc or ""), Color3.fromRGB(170, 170, 255))
+        end
+    end
+}
+
+Commands["fly"] = {
+    desc = "Enable flight engine | ;fly [speed]",
+    func = function(args)
+        State.FlySpeed = tonumber(args[1]) or 100
+        EnableFlight()
+    end
+}
+
+Commands["unfly"] = {
+    desc = "Disable flight engine",
+    func = function() DisableFlight() end
+}
+
+Commands["god"] = {
+    desc = "Enable godmode (4 methods)",
+    func = function() EnableGodmode() end
+}
+
+Commands["ungod"] = {
+    desc = "Disable godmode",
+    func = function() DisableGodmode() end
+}
+
+Commands["speed"] = {
+    desc = "Set walkspeed | ;speed [val]",
+    func = function(args)
+        local val = tonumber(args[1]) or 16
+        local hum = GetHum()
+        if hum then hum.WalkSpeed = val end
+        Log("Speed: " .. val, Color3.fromRGB(80, 255, 150))
+    end
+}
+
+Commands["jump"] = {
+    desc = "Set jump power | ;jump [val]",
+    func = function(args)
+        local val = tonumber(args[1]) or 50
+        local hum = GetHum()
+        if hum then hum.JumpPower = val end
+        Log("JumpPower: " .. val, Color3.fromRGB(80, 255, 150))
+    end
+}
+
+Commands["noclip"] = {
+    desc = "Toggle noclip",
+    func = function()
+        local char = GetChar()
+        if not char then return end
+        if State.NoclipActive then
+            State.NoclipActive = false
+            if State.NoclipConn then
+                State.NoclipConn:Disconnect()
+                State.NoclipConn = nil
+            end
+            for _, p in char:GetDescendants() do
+                if p:IsA("BasePart") then p.CanCollide = true end
+            end
+            Log("Noclip OFF", Color3.fromRGB(255, 90, 90))
+        else
+            State.NoclipActive = true
+            State.NoclipConn = RunService.Stepped:Connect(function()
+                if not State.NoclipActive then return end
+                local c = LocalPlayer.Character
+                if not c then return end
+                for _, p in c:GetDescendants() do
+                    if p:IsA("BasePart") then p.CanCollide = false end
+                end
+            end)
+            Log("Noclip ON", Color3.fromRGB(80, 255, 150))
+        end
+    end
+}
+
+Commands["tp"] = {
+    desc = "Teleport to player | ;tp [name]",
+    func = function(args)
+        local target = GetPlayer(args[1])
+        if not target then
+            Log("Player not found.", Color3.fromRGB(255, 80, 80))
+            return
+        end
+        local hrp = GetHRP()
+        local tChar = target.Character
+        local tHRP = tChar and tChar:FindFirstChild("HumanoidRootPart")
+        if hrp and tHRP then
+            hrp.CFrame = tHRP.CFrame + Vector3.new(3, 0, 0)
+            Log("Teleported to " .. target.Name, Color3.fromRGB(80, 255, 150))
+        end
+    end
+}
+
+Commands["goto"] = {
+    desc = "Alias for tp | ;goto [name]",
+    func = function(args) Commands["tp"].func(args) end
+}
+
+Commands["invisible"] = {
+    desc = "Toggle local invisibility",
+    func = function()
+        local char = GetChar()
+        if not char then return end
+        State.InvisActive = not State.InvisActive
+        local trans = State.InvisActive and 1 or 0
+        for _, p in char:GetDescendants() do
+            if p:IsA("BasePart") then
+                p.LocalTransparencyModifier = trans
+            end
+        end
+        Log("Invisible: " .. tostring(State.InvisActive), Color3.fromRGB(180, 180, 255))
+    end
+}
+
+Commands["reset"] = {
+    desc = "Reset your character",
+    func = function()
+        DisableGodmode()
+        if State.FlyActive then DisableFlight() end
+        local hum = GetHum()
+        if hum then hum.Health = 0 end
+        Log("Resetting...", Color3.fromRGB(255, 170, 60))
+    end
+}
+
+Commands["fling"] = {
+    desc = "Fling upward | ;fling [power]",
+    func = function(args)
+        local power = tonumber(args[1]) or 250
+        local hrp = GetHRP()
+        if hrp then
+            hrp.AssemblyLinearVelocity = Vector3.new(
+                math.random(-power, power), power, math.random(-power, power)
+            )
+            Log("Flung! Power: " .. power, Color3.fromRGB(255, 210, 60))
+        end
+    end
+}
+
+Commands["sit"] = {
+    desc = "Force sit",
+    func = function()
+        local hum = GetHum()
+        if hum then hum.Sit = true end
+        Log("Sitting...", Color3.fromRGB(200, 200, 255))
+    end
+}
+
+Commands["unsit"] = {
+    desc = "Stand up",
+    func = function()
+        local hum = GetHum()
+        if hum then hum.Sit = false end
+        Log("Standing.", Color3.fromRGB(200, 200, 255))
+    end
+}
+
+Commands["time"] = {
+    desc = "Set time of day | ;time [0-24]",
+    func = function(args)
+        local val = tonumber(args[1]) or 12
+        game:GetService("Lighting").TimeOfDay = val .. ":00:00"
+        Log("Time: " .. val, Color3.fromRGB(255, 220, 80))
+    end
+}
+
+Commands["fog"] = {
+    desc = "Set fog distance | ;fog [dist]",
+    func = function(args)
+        local val = tonumber(args[1]) or 1000
+        local L = game:GetService("Lighting")
+        L.FogStart = 0
+        L.FogEnd = val
+        Log("Fog: " .. val, Color3.fromRGB(180, 210, 255))
+    end
+}
+
+Commands["brightness"] = {
+    desc = "Set brightness | ;brightness [val]",
+    func = function(args)
+        local val = tonumber(args[1]) or 1
+        game:GetService("Lighting").Brightness = val
+        Log("Brightness: " .. val, Color3.fromRGB(255, 240, 130))
+    end
+}
+
+Commands["players"] = {
+    desc = "List players in server",
+    func = function()
+        Log("Players:", Settings.AccentColor)
+        for _, p in Players:GetPlayers() do
+            Log("  * " .. p.Name, Color3.fromRGB(160, 255, 160))
+        end
+    end
+}
+
+-- Auto-cleaning connection for respawns to handle flight safely
+LocalPlayer.CharacterAdded:Connect(function(char)
+    if State.FlyActive then
+        DisableFlight()
+    end
+end)
+
+Commands["ping"] = {
+    desc = "Show your ping",
+    func = function()
+        Log("Ping: ~" .. math.floor(LocalPlayer:GetNetworkPing() * 1000) .. "ms", Color3.fromRGB(80, 255, 200))
+    end
+}
+
+Commands["pos"] = {
+    desc = "Print your position",
+    func = function()
+        local hrp = GetHRP()
+        if hrp then
+            local p = hrp.Position
+            Log(string.format("Pos: %.1f, %.1f, %.1f", p.X, p.Y, p.Z), Color3.fromRGB(180, 255, 220))
+        end
+    end
+}
+
+Commands["freecam"] = {
+    desc = "Toggle freecam",
+    func = function()
+        if Camera.CameraType == Enum.CameraType.Scriptable then
+            Camera.CameraType = Enum.CameraType.Custom
+            Log("Freecam OFF", Color3.fromRGB(255, 90, 90))
+        else
+            Camera.CameraType = Enum.CameraType.Scriptable
+            Log("Freecam ON", Color3.fromRGB(80, 255, 150))
+        end
+    end
+}
+
+Commands["clear"] = {
+    desc = "Clear output log",
+    func = function()
+        for _, c in OutputBox:GetChildren() do
+            if c:IsA("TextLabel") then c:Destroy() end
+        end
+    end
+}
+
+-- ================================================
+-- PARSER
+-- ================================================
+
+local function ParseCommand(input)
+    input = input:match("^%s*(.-)%s*$")
+    if input:sub(1, #Settings.Prefix) ~= Settings.Prefix then return end
+    input = input:sub(#Settings.Prefix + 1)
+    local parts = {}
+    for word in input:gmatch("%S+") do table.insert(parts, word) end
+    if #parts == 0 then return end
+    local cmd = table.remove(parts, 1):lower()
+    if Commands[cmd] then
+        local ok, err = pcall(Commands[cmd].func, parts)
+        if not ok then
+            Log("Error: " .. tostring(err), Color3.fromRGB(255, 80, 80))
+        end
+    else
+        Log("Unknown: ;" .. cmd .. " | try ;help", Color3.fromRGB(255, 100, 80))
+    end
+end
+
+local function SubmitInput()
+    local text = InputBox.Text
+    if text ~= "" then
+        Log("> " .. text, Color3.fromRGB(140, 140, 200))
+        ParseCommand(text)
+        InputBox.Text = ""
+    end
+end
+
+InputBox.FocusLost:Connect(function(enter)
+    if enter then SubmitInput() end
+end)
+SendBtn.MouseButton1Click:Connect(SubmitInput)
+
+UserInputService.InputBegan:Connect(function(input, gpe)
+    if gpe then return end
+    if input.KeyCode == Enum.KeyCode.RightControl then
+        TogglePanel()
+    end
+end)
+
+-- ================================================
+-- STARTUP
+-- ================================================
+Log("Titan Yield loaded!", Settings.AccentColor)
+Log("Tap [TY] button to open. Type ;help for commands.", Color3.fromRGB(160, 160, 220))
